@@ -4,19 +4,14 @@ const app = express();
 const mysql = require('mysql2');
 const pool = mysql.createPool({
     connectionLimit: 10,
-    host : 'hostname',
+    host : 'host',
     user : 'user',
     password : 'password',
-    database : 'database',
+    database : 'keyspace',
     dateStrings: true
 });
  
 app.get("/", (request, response) => {
-  pool.query('ALTER TABLE products ADD PRIMARY KEY (product_id)',
-  function(err, results){
-    if(err) console.log(err)
-    else response.send(results);
-  })
   //response.end(`<h1>This is the first homework from the course Big Data Processing 2021</h1>`)
 });
 
@@ -31,7 +26,7 @@ app.route('/reviews/products/:product_id')
       pool.query(`
       SELECT review_headline, review_body 
       FROM reviews 
-      WHERE product_id=${id}`, 
+      WHERE product_id = '${id}'`, 
       function(err, results) {
           if(err) {
               console.log("ERROR\n");
@@ -80,14 +75,17 @@ app.route('/reviews/popular')
 
 
     pool.query(`
-    SELECT product_title, reviews_amount 
+    SELECT product_title, Products.product_id, reviews_amount
     FROM 
-      (SELECT product_id, COUNT(review_id) AS reviews_amount , review_date
-      FROM book_reviews.reviews GROUP BY product_id
-      WHERE review_date = ${date}) AS CountReviews, book_reviews.products AS Products 
-    WHERE Products.product_id = CountReviews.product_id 
-    ORDER BY reviews_amount DESC 
-    LIMIT ${ n == undefined ? 1 : n};`, 
+	    (SELECT product_id, COUNT(review_id) AS reviews_amount 
+      FROM 
+        (SELECT * 
+        FROM reviews
+        WHERE review_date = '${date}') AS DateTable
+      GROUP BY product_id) AS CountReviews, amazon_books_reviews.products AS Products
+    WHERE Products.product_id = CountReviews.product_id
+    ORDER BY reviews_amount DESC
+    LIMIT ${ n == undefined ? 1 : n}`, 
     function(err, results) {
       if(err) {
           console.log("ERROR\n");
@@ -101,10 +99,14 @@ app.route('/reviews/popular')
 app.route('/customers/productive')
   .get(function(request,response,next) {
     let n = request.query.n;
+    let date = request.query.date;
 
     pool.query(`
     SELECT customer_id, COUNT(review_id) AS reviews_amount
-    FROM reviews
+    FROM 
+      (SELECT *
+      FROM reviews
+      WHERE review_date='${date}') AS DateTable
     WHERE verified_purchase='Y'
     GROUP BY customer_id
     ORDER BY reviews_amount DESC
@@ -152,10 +154,14 @@ app.route('/rating')
 app.route('/haters')
   .get(function(request,response,next) {
     let n = request.query.n;
+    let date = request.query.date;
 
     pool.query(`
     SELECT customer_id, COUNT(star_rating) AS negative_reviews_amount
-    FROM reviews
+    FROM 
+      (SELECT *
+      FROM reviews
+      WHERE review_date='${date}') AS DateTable
     WHERE star_rating = '1' OR star_rating = '2'
     GROUP BY customer_id
     ORDER BY negative_reviews_amount DESC
@@ -173,9 +179,13 @@ app.route('/haters')
 app.route('/backers')
   .get(function(request,response,next) {
     let n = request.query.n;
+    let date = request.query.date;
 
     pool.query(`SELECT customer_id, COUNT(star_rating) AS positive_reviews_amount
-    FROM reviews
+    FROM 
+      (SELECT *
+      FROM reviews
+      WHERE review_date='${date}') AS DateTable
     WHERE star_rating = '4' OR star_rating = '5'
     GROUP BY customer_id
     ORDER BY positive_reviews_amount DESC
